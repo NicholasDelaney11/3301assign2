@@ -96,11 +96,132 @@ public class SmoothingFilter extends Frame implements ActionListener {
             }
             source.repaint();
         }
+        
+        if (((Button) e.getSource()).getLabel().equals("5x5 Kuwahara")) {
+            
+            int maskSize = 5;
+            int[] topLeft = new int[9];
+            int[] topRight = new int[9];
+            int[] botLeft = new int[9];
+            int[] botRight = new int[9];
+            int xMin, xMax, yMin, yMax;
+            int sumTopRight = 0;
+            int sumTopLeft = 0;
+            int sumBotLeft = 0;
+            int sumBotRight = 0;
+            float hue = 0;
+            float saturation = 0;
+            float brightness = 0;
+
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int count1 = 0;
+                    int count2=0;
+                    int count3=0;
+                    int count4=0;
+                    xMin = x - (maskSize / 2);
+                    xMax = x + (maskSize / 2);
+                    yMin = y - (maskSize / 2);
+                    yMax = y + (maskSize / 2);
+                    for (int r = yMin; r <= yMax; r++) {
+                        for (int c = xMin; c <= xMax; c++) {
+
+                            if (r < 0 || r >= height || c < 0 || c >= width) {
+
+                                continue;
+                            }
+
+                            Color clr = new Color(source.image.getRGB(c, r));
+                            int red = clr.getRed();
+                            int green = clr.getGreen();
+                            int blue = clr.getBlue();
+
+                            Color.RGBtoHSB(red, green, blue, null);
+                            float[] hsb = Color.RGBtoHSB(red, green, blue, null);
+                            hue = hsb[0];
+                            saturation = hsb[1];
+                            brightness = hsb[2]*255;
+                            //System.out.println("brightness " +hsb[2]);
+
+                            if (c <= x && r <= y) { //topLeft
+                                topLeft[count1] = (int) brightness;
+                                sumTopRight += (int)brightness;
+                                count1++;
+
+                            } else if (c >= x && r <= y) {    //topRight
+                                topRight[count2] = (int) brightness;
+                                sumTopLeft += (int) brightness;
+                                count2++;
+                            } else if (c <= x && r >= y) {          //botLEft
+                                botLeft[count3] = (int) brightness;
+                                sumBotRight += (int) brightness;
+                                count3++;
+                            } else if (c >= x && y >= y) {    //botRight
+                                botRight[count4] = (int) brightness;
+                                sumBotLeft += (int) brightness;
+                                count4++;
+                            }
+
+                            // target.image.setRGB(x, y, redsort[0][1] << 16 | greensort[2] << 8 | bluesort[2]);
+                        }
+                    }
+
+                    int[] sortArray = new int[4];
+                    
+                   // System.out.println("top left "  + Arrays.toString(topLeft));
+                    int topLeftVariance = variance(topLeft, 9)[0];
+                    int topRightVariance = variance(topRight, 9)[0];
+                    int botRightVariance = variance(botLeft, 9)[0];
+                    int botLeftVariance = variance(topRight, 9)[0];
+                    int topLeftmean = sumTopLeft / 9;
+                    int topRightmean = sumTopRight / 9;
+                    int botRightmean = sumBotRight / 9;
+                    int botLeftmean = sumBotLeft / 9;
+
+                    sortArray[0] = topLeftVariance;
+                    sortArray[1] = topRightVariance;
+                    sortArray[2] = botLeftVariance;
+                    sortArray[3] = topRightVariance;
+                    java.util.Arrays.sort(sortArray);
+
+                    int finalVariance = sortArray[0];
+                    float mean = 0;
+
+                    if (finalVariance == topLeftVariance) {
+                        mean = variance(topLeft, 9)[1];
+                    }
+                    if (finalVariance == topRightVariance) {
+                        mean = variance(topRight, 9)[1];
+                    }
+                    if (finalVariance == botLeftVariance) {
+                        mean = variance(botLeft, 9)[1];
+                    }
+                    if (finalVariance == botRightVariance) {
+                        mean = variance(botRight, 9)[1];
+                    }
+                    
+                    System.out.println("mean " +mean/255);
+                    int rgb = Color.HSBtoRGB(hue, saturation, mean/255);
+                    
+                    
+                    int red = (rgb >> 16) & 0xFF;
+
+                    int green = (rgb >> 8) & 0xFF;
+
+                    int blue = rgb & 0xFF;
+
+                    target.image.setRGB(x,y,rgb);
+
+                }
+            }
+            target.resetImage(target.image);
+            
+        }
 
         if (((Button) e.getSource()).getLabel().equals("5x5 Median")) {
 
             int maskSize = 5;
-            int red[] = null, green[], blue[];
+            int red[], green[], blue[];
             int xMin, xMax, yMin, yMax;
             red = new int[25];
             green = new int[25];
@@ -108,7 +229,8 @@ public class SmoothingFilter extends Frame implements ActionListener {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     int count = 0;
-                    xMin = x - (maskSize / 2);
+
+                    xMin = x - (maskSize / 2);   //get difference between size of kernel and boundary
                     xMax = x + (maskSize / 2);
                     yMin = y - (maskSize / 2);
                     yMax = y + (maskSize / 2);
@@ -116,7 +238,7 @@ public class SmoothingFilter extends Frame implements ActionListener {
                         for (int c = xMin; c <= xMax; c++) {
                             if (r < 0 || r >= height || c < 0 || c >= width) {
 
-                                continue;
+                                
                             } else {
                                 Color clr = new Color(source.image.getRGB(c, r));
                                 red[count] = clr.getRed();
@@ -135,17 +257,46 @@ public class SmoothingFilter extends Frame implements ActionListener {
                 }
             }
             target.resetImage(target.image);
+            System.out.println("done");
 
         }
 
         if (((Button) e.getSource()).getLabel().equals("5x5 Gaussian")) {
-            // 3 mean filters?
+            // create a 1D gaussian kernel
+            float sigma = Float.valueOf(texSigma.getText());
+            int kSize = 5;
+            int w = 2; // kernel width
+            float[] gKernel = new float[5];
+            float sum = 0;
+            for (int i = -w; i <= w; i++) {
+                float gx = (float) Math.pow(1 / (float) Math.sqrt(2 * Math.PI) * sigma, 1 / Math.exp(2 * sigma * sigma) * (i * i) );
+                gKernel[i + 2] = gx; 
+                sum += gx;
+            }
+            // normalize the kernel
+            for (int i = 0; i < kSize; i++) {
+                gKernel[i] /= sum;
+            }
+            
+            // apply gaussian kernel
+            float rSum = 0;
+            float gSum = 0;
+            float bSum = 0;
+            for (int q = 0; q <= height; q++) {
+                for (int p = w + 1; p < width - w; p++) {
+                    
+                }
+            }
+        
+           
+            
+            
 
         }
 
         if (((Button) e.getSource()).getLabel().equals("5x5 mean")) {
             int w = 2;
-            for (int q = 0; q < height; q++) {   // full height of image
+            for (int q = 0; q < height; q++) {   // full height of image 
                 int rSum = 0;
                 int gSum = 0;
                 int bSum = 0;
@@ -217,6 +368,42 @@ public class SmoothingFilter extends Frame implements ActionListener {
             b[i] = (float) h[2][i] / (width * height);
         }
         return new float[][]{r, g, b};
+    }
+    
+     public int[] variance(int a[], int n) {
+        // Compute mean (average of elements) 
+        int sum = 0;
+        int[] cont = new int[2];
+        int count=0;
+        for (int i = 0; i < n; i++) {
+            if (a[i]!=0){
+                sum += a[i];
+                count++;
+            }
+            
+        }
+        int mean = sum
+                / count;
+
+        double variance = 0;
+        for (int i = 0; i < n; i++) {
+            double temp = a[i] - mean;
+            variance += Math.pow(temp, 2);
+        }
+        cont[0] = (int) (variance / n);
+        cont[1] = mean;
+        return cont;
+    }
+
+    public int mean(int[] data) {
+        int sum = 0;
+        int average;
+
+        for (int i = 0; i < data.length; i++) {
+            sum = sum + data[i];
+        }
+        average = sum / data.length;
+        return average;
     }
 
     public static void main(String[] args) {
